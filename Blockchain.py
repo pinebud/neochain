@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import pprint
 from time import time
 from uuid import uuid4
 from flask import Flask, jsonify, request
@@ -10,14 +11,31 @@ from urllib.parse import urlparse
 import requests
 import sys
 
+from mongoclient import MongoClient
+
 
 class Blockchain(object):
 
     def __init__(self):
-        self.chain = []
-        self.current_transactions = []
-        self.new_block(previous_hash=1, proof=100)
-        self.nodes = set()
+        # 从数据库中加载链和未上链的交易数据
+        self.client = MongoClient()
+        latest_chain = self.client.find_latest_chain()
+        chain_value = None
+        for item in latest_chain:
+            chain_value = item['value']
+        self.chain = chain_value['chain'] if chain_value else []
+        self.current_transactions = chain_value['flying_transactions'] if chain_value else []
+
+        # 创世节点
+        if len(self.chain) <= 0:
+            self.new_block(previous_hash=1, proof=100)
+
+        # 加载探测到的全网节点
+        latest_nodes = self.client.find_latest_nodes()
+        nodes_value = None
+        for item in latest_nodes:
+            nodes_value = item['value']
+        self.nodes = nodes_value['nodes'] if nodes_value else set()
 
     def new_block(self, proof, previous_hash=None):
         """
@@ -38,6 +56,7 @@ class Blockchain(object):
         # 重置当前交易记录
         self.current_transactions = []
         self.chain.append(block)
+        self.serialize_chain_and_flying_transactions()
         return block
 
     def new_transaction(self, sender, recipient, amount):
@@ -55,6 +74,7 @@ class Blockchain(object):
             'amount': amount,
         })
 
+        self.serialize_chain_and_flying_transactions()
         return self.last_block['index'] + 1
 
     @staticmethod
@@ -100,16 +120,6 @@ class Blockchain(object):
         guess = f'{last_proof}{proof}'.encode()
         guess_hash = hashlib.sha256(guess).hexdigest()
         return guess_hash[:4] == "0000"
-
-    def register_node(self, address):
-        """
-        Add a new node to the list of nodes
-        :param address: <str> Address of node. Eg. 'http://192.168.0.5:5000'
-        :return: None
-        """
-
-        parsed_url = urlparse(address)
-        self.nodes.add(parsed_url.netloc)
 
     def valid_chain(self, chain):
         """
@@ -168,9 +178,27 @@ class Blockchain(object):
         # Replace our chain if we discovered a new, valid chain longer than ours
         if new_chain:
             self.chain = new_chain
+            self.serialize_chain_and_flying_transactions()
             return True
 
         return False
+
+    def serialize_chain_and_flying_transactions(self):
+        self.client.insert_chain({'chain': self.chain, 'flying_transactions': self.current_transactions})
+
+    def register_node(self, address):
+        """
+        Add a new node to the list of nodes
+        :param address: <str> Address of node. Eg. 'http://192.168.0.5:5000'
+        :return: None
+        """
+
+        parsed_url = urlparse(address)
+        self.nodes.add(parsed_url.netloc)
+        self.serialize_nodes()
+
+    def serialize_nodes(self):
+        self.client.insert_nodes(self.nodes)
 
 
 # Instantiate our Node
