@@ -7,7 +7,9 @@ Steps to build up the dev environment:
 2. install the requirements by executing:
 pip3 install -r requirements.txt
 
-3. Simply start up your node by executing:
+3. create test.ini under config folder according toou config.ini.templete 
+
+4. Simply start up your node by executing:
 python3 blockchain.py
 or start up by specifying the port:
 python3 blockchain.py 6666

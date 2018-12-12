@@ -3,13 +3,16 @@ import pymongo
 import time
 import pprint
 
+from configuration import Config
+
 
 class MongoClient(object):
 
     def __init__(self):
-        self.myclient = pymongo.MongoClient('47.92.3.134', 27017)
-        self.mydb = self.myclient["neochain"]
-        self.mydb.authenticate('sense', '123456')
+        config = Config()
+        self.myclient = pymongo.MongoClient(config.get('database', 'host'), int(config.get('database', 'port')))
+        self.mydb = self.myclient[config.get('database', 'db_name')]
+        self.mydb.authenticate(config.get('database', 'user'), config.get('database', 'password'))
 
     def insert_chain(self, value):
         return self.mydb.get_collection('neochain').insert_one({'value': value, 'created_time': time.time()})
